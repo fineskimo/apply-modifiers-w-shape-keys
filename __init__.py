@@ -65,6 +65,7 @@ class AWS_OT_applymodswithshapekeys(bpy.types.Operator):
     def execute(self, context):
 
         ob = context.view_layer.objects.active
+        original_name = ob.name
         bpy.ops.object.select_all(action='DESELECT')
         ob.select_set(True)
         context.view_layer.objects.active = ob
@@ -79,36 +80,47 @@ class AWS_OT_applymodswithshapekeys(bpy.types.Operator):
         list_shapes = []
         basename = bpy.context.object.name
 
+        # populate shapes list
         if context.object.data.shape_keys:
             list_shapes = [o for o in context.object.data.shape_keys.key_blocks]
 
+        # if no shapekeys apply selected mods (maybe just report "no shapekeys")
         if(list_shapes == []):
             j = 31
             for i, flag in reversed(list(enumerate(reversed(self.selection)))):
                 if flag:
-                    modifierName = ob.modifiers[j - i].name
-                    bpy.ops.object.modifier_apply(modifier=modifierName)
-                    j -= 1
+                    try:
+                        modifierName = ob.modifiers[j - i].name
+                        bpy.ops.object.modifier_apply(modifier=modifierName)
+                        j -= 1
+
+                    except RuntimeError:
+                        ShowMessageBox("Modifer is disabled, skipping apply", "Report: Error ", 'ERROR')
+                        j -= 1
 
             area.type = active_type
             return {'FINISHED'}
 
         obj_list.append(context.view_layer.objects.active)
 
+        # create duplicate object for each shape add to object list
         for i in range(1, len(list_shapes)):
             bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
 
             obj_list.append(context.view_layer.objects.active)
 
+        # iterate through object list
         for i, o in enumerate(obj_list):
             context.view_layer.objects.active = o
+            o.name = o.data.shape_keys.key_blocks[i].name
             list_names.append(o.data.shape_keys.key_blocks[i].name)
 
+            # remove shapekeys after index
             for j in range(i + 1, len(obj_list))[::-1]:
                 context.object.active_shape_key_index = j
-
                 bpy.ops.object.shape_key_remove()
 
+            # remove shapekeys before index
             for j in range(0, i):
                 context.object.active_shape_key_index = 0
 
@@ -118,31 +130,18 @@ class AWS_OT_applymodswithshapekeys(bpy.types.Operator):
             context.object.active_shape_key_index = 0
             bpy.ops.object.shape_key_remove()
 
+            # apply selected modifiers to object
+            j = 31
             try:
-                j = 31
-                for i, flag in reversed(list(enumerate(reversed(self.selection)))):
+                for idx, flag in reversed(list(enumerate(reversed(self.selection)))):
                     if flag:
-                        modifierName = o.modifiers[j - i].name
+                        modifierName = o.modifiers[j - idx].name
                         bpy.ops.object.modifier_apply(modifier=modifierName)
                         j -= 1
 
             except RuntimeError:
-                area.type = active_type
+                j -= 1
                 ShowMessageBox("Modifer is disabled, skipping apply", "Report: Error ", 'ERROR')
-
-            if i > 0:
-                bpy.context.object.name = f'{basename}_{list_names[i]}'
-                # time to apply modifiers
-                try:
-                    j = 31
-                    for i, flag in reversed(list(enumerate(reversed(self.selection)))):
-                        if flag:
-                            modifierName = o.modifiers[j - i].name
-                            bpy.ops.object.modifier_apply(modifier=modifierName)
-                            j -= 1
-                except RuntimeError:
-                    area.type = active_type
-                    ShowMessageBox("Modifer is disabled, skipping apply", "Report: Error ", 'ERROR')
 
         bpy.ops.object.select_all(action='DESELECT')
         context.view_layer.objects.active = obj_list[0]
@@ -150,6 +149,7 @@ class AWS_OT_applymodswithshapekeys(bpy.types.Operator):
         bpy.ops.object.shape_key_add(from_mix=False)
         context.object.data.shape_keys.key_blocks[0].name = list_names[0]
 
+        # combine obects as shapekeys
         for i in range(1, len(obj_list)):
             obj_list[i].select_set(state=True)
             bpy.ops.object.join_shapes()
@@ -158,10 +158,12 @@ class AWS_OT_applymodswithshapekeys(bpy.types.Operator):
 
         bpy.ops.object.select_all(action='DESELECT')
 
+        # select and delete temporary duplicates
         for o in obj_list[1:]:
             o.select_set(True)
 
         bpy.ops.object.delete(use_global=False)
+        obj_list[0].name = original_name
         context.view_layer.objects.active = obj_list[0]
         context.view_layer.objects.active.select_set(state=True)
 
