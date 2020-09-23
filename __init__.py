@@ -105,7 +105,7 @@ class AWS_OT_applymodswithshapekeys(bpy.types.Operator):
 
         # create duplicate object for each shape add to object list
         for i in range(1, len(list_shapes)):
-            bpy.ops.object.duplicate(linked=False, mode='TRANSLATION')
+            bpy.ops.object.duplicate()
 
             obj_list.append(context.view_layer.objects.active)
 
